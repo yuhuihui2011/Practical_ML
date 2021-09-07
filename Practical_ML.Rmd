@@ -1,0 +1,96 @@
+---
+title: "Practical_ML"
+author: "Huihui_Yu"
+date: "9/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 0. Loading required packages and the datasets
+```{r}
+suppressPackageStartupMessages({
+    library(caret)
+})
+```
+
+Read the training and the testing datasets and have a review on the datasets
+
+```{r cars}
+training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                   row.names = 1)
+dim(training)
+head(training)
+testing<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                  row.names = 1)
+dim(testing)
+head(testing)
+names(training)
+names(testing)[!names(testing)%in%names(training)]
+```
+
+
+## 1. Data preprocessing
+
+### 1.1 First, we need to remove the first 6 coloums becasue they are related to identifiers.
+```{r}
+training<-training[,-c(1:6)]
+testing<-testing[,-c(1:6)]
+```
+
+### 1.2 Remove near zero variables
+```{r}
+nzv<-nearZeroVar(training)
+training<-training[,-nzv]
+testing<-testing[,-nzv]
+```
+
+### 1.3 Check the missing date rate and remove the variables with missing date
+```{r}
+miss<-colSums(is.na(training)) 
+table(miss)  ## 53 variables with miss = 0 and 41 variables with miss= 19216
+training<-training[,miss==0]
+testing<-testing[,miss==0]
+dim(training)
+names(training)
+```
+Now we have 53 variables left, including 52 predictors and 1 classifiers ("Classe")
+
+## 2. Use cross-validation to find best models
+
+### 2.1 Partition training dataset into cvTraining and cvTesting
+```{r}
+training$classe<-factor(training$classe)
+cv<-createDataPartition(training$classe,p=0.75,list=F)
+cvTraining<-training[cv,]
+cvTesting<-training[-cv,]
+dim(cvTraining)
+dim(cvTesting)
+```
+
+### 2.2 Training two models:  boosted trees ("gbm") and random forest ("rf")
+
+```{r}
+(gbm<-train(classe~., cvTraining, method='gbm',verbose=F)) 
+(rf<-train(classe~., cvTraining, method='rf')) 
+```
+
+### 2.3 Find the best model
+
+```{r}
+confusionMatrix(predict(gbm,cvTesting),cvTesting$classe)
+confusionMatrix(predict(rf,cvTesting),cvTesting$classe)
+```
+We can see the best model is: random forest ("rf").
+
+## 3. Predict the testing data
+
+```{r}
+predict(rf, testing)
+```
+
+## Reference
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
