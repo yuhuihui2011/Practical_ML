@@ -1,0 +1,113 @@
+---
+title: "Practical_ML"
+author: "Huihui_Yu"
+date: "9/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Loading required packages and the datasets
+```{r}
+suppressPackageStartupMessages({
+    library(caret)
+    library(doParallel)
+})
+```
+
+Read the training and the testing datasets and have a review on the datasets
+
+```{r cars}
+training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                   row.names = 1)
+testing<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                  row.names = 1)
+dim(training) # head(training)
+dim(testing) # head(testing)
+names(training)
+names(training)[!names(training)%in%names(testing)];names(testing)[!names(testing)%in%names(training)]
+```
+So, both training dataset and testing dataset have 159 coloumns, but they differ with a column "Classe" in training and "problem_id" in testing.
+
+## 2. Data preprocessing
+
+### 2.1 Remove the first 6 coloums related to identifiers.
+```{r}
+training<-training[,-c(1:6)]
+testing<-testing[,-c(1:6)]
+```
+
+### 2.2 Remove near zero variables
+```{r}
+nzv<-nearZeroVar(training)
+training<-training[,-nzv]
+testing<-testing[,-nzv]
+```
+
+### 2.3 Remove the variables with missing date
+```{r}
+miss<-colSums(is.na(training)) 
+table(miss)  ## 53 variables with miss = 0 and 41 variables with miss  = 19216
+training<-training[, miss==0]
+testing<-testing[, miss==0]
+dim(training)
+names(training)
+```
+Now we have 53 variables left in training, including 52 predictors and 1 classifiers ("Classe")
+
+## 3. Use cross-validation to find best models
+
+### 3.1 Split training dataset into train/test partitions
+```{r}
+set.seed(2021)
+training$classe<-factor(training$classe)
+cv<-createDataPartition(training$classe, p=0.6, list=F)
+cvTraining<-training[cv,]
+cvTesting<-training[-cv,]
+dim(cvTraining)
+dim(cvTesting)
+```
+
+### 3.2 Training two models:  boosted trees ("gbm") and random forest ("rf")
+
+```{r}
+set.seed(2021)
+cl<- makePSOCKcluster(32)
+registerDoParallel(cl)
+set.seed(2021)
+(gbm<-train(classe~., cvTraining, method='gbm',verbose=F)) 
+set.seed(2021)
+(rf<-train(classe~., cvTraining, method='rf'))
+stopCluster(cl)
+```
+
+### 3.3 Find the best model
+```{r}
+(cm1<-confusionMatrix(predict(gbm,cvTesting),cvTesting$classe))
+(cm2<-confusionMatrix(predict(rf,cvTesting),cvTesting$classe))
+```
+The accuracy of random forest (0.99) is higher than boosted trees (0.96). So we will use random forest ("rf") model. 
+
+### 3.4 Out-of-sample error
+```{r}
+err<- 1-cm2$overall[[1]]
+err
+```
+The out of sample error is about 0.0087 (~ 0.87%).
+
+
+## 4. Predict the testing data
+
+```{r}
+pred<-predict(rf, testing)
+names(pred)<-testing$problem_id
+pred
+```
+
+## Reference
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+
+
